@@ -2104,9 +2104,8 @@ int drop_caches_sysctl_handler(struct ctl_table *, int,
 #endif
 
 void drop_pagecache_sb(struct super_block *sb, void *unused);
-unsigned long shrink_node_slabs(gfp_t gfp_mask, int nid,
-				unsigned long nr_scanned,
-				unsigned long nr_eligible);
+void drop_slab(void);
+void drop_slab_node(int nid);
 
 #ifndef CONFIG_MMU
 #define randomize_va_space 0
