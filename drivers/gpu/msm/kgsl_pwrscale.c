@@ -892,6 +892,8 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 			 &pwrscale->devfreqptr->dev.kobj,
 			"available_governors", "gpu_available_governor");
 
+	set_bit(POPP_ON, &pwrscale->popp_state);
+
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_pwrscale_init);
