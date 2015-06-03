@@ -1125,60 +1125,15 @@ size_t iommu_pgsize(unsigned long pgsize_bitmap,
 int iommu_map(struct iommu_domain *domain, unsigned long iova,
 	      phys_addr_t paddr, size_t size, int prot)
 {
-	unsigned long orig_iova = iova, pgsize_bitmap;
-	unsigned int min_pagesz;
-	size_t orig_size = size;
-	int ret = 0;
-
 	trace_map_start(iova, paddr, size);
-	if (unlikely(domain->ops->map == NULL ||
-		     (domain->ops->pgsize_bitmap == 0UL &&
-		      !domain->ops->get_pgsize_bitmap))) {
+        if (unlikely(domain->ops->map_range == NULL)) {
 		trace_map_end(iova, paddr, size);
 		return -ENODEV;
 	}
 
-	pgsize_bitmap = iommu_get_pgsize_bitmap(domain);
-	/* find out the minimum page size supported */
-	min_pagesz = 1 << __ffs(pgsize_bitmap);
+	BUG_ON((iova | paddr | size) & (~PAGE_MASK));
 
-	/*
-	 * both the virtual address and the physical one, as well as
-	 * the size of the mapping, must be aligned (at least) to the
-	 * size of the smallest page supported by the hardware
-	 */
-	if (!IS_ALIGNED(iova | paddr | size, min_pagesz)) {
-		pr_err("unaligned: iova 0x%lx pa %pa size 0x%zx min_pagesz 0x%x\n",
-		       iova, &paddr, size, min_pagesz);
-		trace_map_end(iova, paddr, size);
-		return -EINVAL;
-	}
-
-	pr_debug("map: iova 0x%lx pa %pa size 0x%zx\n", iova, &paddr, size);
-
-	while (size) {
-		size_t pgsize = iommu_pgsize(pgsize_bitmap, iova | paddr, size);
-
-		pr_debug("mapping: iova 0x%lx pa %pa pgsize 0x%zx\n",
-			 iova, &paddr, pgsize);
-
-		ret = domain->ops->map(domain, iova, paddr, pgsize, prot);
-		if (ret)
-			break;
-
-		iova += pgsize;
-		paddr += pgsize;
-		size -= pgsize;
-	}
-
-	/* unroll mapping in case something went wrong */
-	if (ret)
-		iommu_unmap(domain, orig_iova, orig_size - size);
-	else
-		trace_map(iova, paddr, size);
-
-	trace_map_end(iova, paddr, size);
-	return ret;
+	return domain->ops->map(domain, iova, paddr, size, prot);
 }
 EXPORT_SYMBOL_GPL(iommu_map);
 
