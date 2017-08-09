@@ -52,16 +52,16 @@ suspend_state_t pm_suspend_target_state;
 EXPORT_SYMBOL_GPL(pm_suspend_target_state);
 
 static const struct platform_suspend_ops *suspend_ops;
-static const struct platform_freeze_ops *freeze_ops;
+static const struct platform_s2idle_ops *s2idle_ops;
 static DECLARE_WAIT_QUEUE_HEAD(s2idle_wait_head);
 
 enum s2idle_states __read_mostly s2idle_state;
 static DEFINE_SPINLOCK(s2idle_lock);
 
-void freeze_set_ops(const struct platform_freeze_ops *ops)
+void s2idle_set_ops(const struct platform_s2idle_ops *ops)
 {
 	lock_system_sleep();
-	freeze_ops = ops;
+	s2idle_ops = ops;
 	unlock_system_sleep();
 }
 
@@ -127,13 +127,13 @@ static void s2idle_loop(void)
 			break;
 		}
 
-		if (freeze_ops && freeze_ops->wake)
-			freeze_ops->wake();
+		if (s2idle_ops && s2idle_ops->wake)
+			s2idle_ops->wake();
 
 		dpm_noirq_end();
 
-		if (freeze_ops && freeze_ops->sync)
-			freeze_ops->sync();
+		if (s2idle_ops && s2idle_ops->sync)
+			s2idle_ops->sync();
 
 		if (pm_wakeup_pending())
 			break;
@@ -246,8 +246,8 @@ static int platform_suspend_prepare(suspend_state_t state)
 
 static int platform_suspend_prepare_late(suspend_state_t state)
 {
-	return state == PM_SUSPEND_TO_IDLE && freeze_ops && freeze_ops->prepare ?
-		freeze_ops->prepare() : 0;
+	return state == PM_SUSPEND_TO_IDLE && s2idle_ops && s2idle_ops->prepare ?
+		s2idle_ops->prepare() : 0;
 }
 
 static int platform_suspend_prepare_noirq(suspend_state_t state)
@@ -264,8 +264,8 @@ static void platform_resume_noirq(suspend_state_t state)
 
 static void platform_resume_early(suspend_state_t state)
 {
-	if (state == PM_SUSPEND_TO_IDLE && freeze_ops && freeze_ops->restore)
-		freeze_ops->restore();
+	if (state == PM_SUSPEND_TO_IDLE && s2idle_ops && s2idle_ops->restore)
+		s2idle_ops->restore();
 }
 
 static void platform_resume_finish(suspend_state_t state)
@@ -276,8 +276,8 @@ static void platform_resume_finish(suspend_state_t state)
 
 static int platform_suspend_begin(suspend_state_t state)
 {
-	if (state == PM_SUSPEND_TO_IDLE && freeze_ops && freeze_ops->begin)
-		return freeze_ops->begin();
+	if (state == PM_SUSPEND_TO_IDLE && s2idle_ops && s2idle_ops->begin)
+		return s2idle_ops->begin();
 	else if (suspend_ops && suspend_ops->begin)
 		return suspend_ops->begin(state);
 	else
@@ -286,8 +286,8 @@ static int platform_suspend_begin(suspend_state_t state)
 
 static void platform_resume_end(suspend_state_t state)
 {
-	if (state == PM_SUSPEND_TO_IDLE && freeze_ops && freeze_ops->end)
-		freeze_ops->end();
+	if (state == PM_SUSPEND_TO_IDLE && s2idle_ops && s2idle_ops->end)
+		s2idle_ops->end();
 	else if (suspend_ops && suspend_ops->end)
 		suspend_ops->end();
 }
