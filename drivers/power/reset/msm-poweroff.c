@@ -155,6 +155,7 @@ static bool get_dload_mode(void)
 #if 0
 static void enable_emergency_dload_mode(void)
 {
+#ifdef WT_COMPILE_FACTORY_VERSION
 	int ret;
 
 	if (emergency_dload_mode_addr) {
@@ -176,6 +177,9 @@ static void enable_emergency_dload_mode(void)
 	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 0);
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
+#else
+	pr_err("Failed to set secure EDLOAD mode: Xiaomi Required\n");
+#endif
 }
 #endif
 
@@ -268,6 +272,17 @@ static void halt_spmi_pmic_arbiter(void)
 	}
 }
 
+static bool device_locked_flag;
+static int __init device_locked(char *str)
+{
+	if (strcmp(str, "1"))
+		device_locked_flag = false;
+	else
+		device_locked_flag = true;
+	return 1;
+}
+__setup("device_locked=", device_locked);
+
 static void msm_restart_prepare(const char *cmd)
 {
 	bool need_warm_reset = false;
@@ -327,7 +342,9 @@ static void msm_restart_prepare(const char *cmd)
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_KEYS_CLEAR);
 			__raw_writel(0x7766550a, restart_reason);
-		} else if (!strncmp(cmd, "oem-", 4)) {
+		} else if (!strncmp(cmd, "fastmmi", 7))  {
+			       __raw_writel(0x77665505, restart_reason);
+		}  else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			int ret;
 			ret = kstrtoul(cmd + 4, 16, &code);
