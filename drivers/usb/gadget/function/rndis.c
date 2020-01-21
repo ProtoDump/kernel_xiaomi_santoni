@@ -943,8 +943,8 @@ void rndis_deregister(int configNr)
 	pr_debug("%s:\n", __func__);
 
 	if (configNr >= RNDIS_MAX_CONFIGS) return;
-	rndis_per_dev_params[configNr].used = 0;
-	rndis_per_dev_params[configNr].flow_ctrl_enable = NULL;
+	rndis_per_dev_params[configNr+1].used = 0;
+	rndis_per_dev_params[configNr+1].flow_ctrl_enable = NULL;
 }
 EXPORT_SYMBOL_GPL(rndis_deregister);
 
