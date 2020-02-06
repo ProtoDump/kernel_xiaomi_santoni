@@ -34,10 +34,6 @@
 #include <linux/fs.h>
 #include <asm/uaccess.h>
 
-#if CTP_CHARGER_DETECT
-#include <linux/power_supply.h>
-#endif
-
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -155,14 +151,6 @@ static struct proc_dir_entry *ft5x0x_proc_entry = NULL;
 
 static u8 is_ic_update_crash = 0;
 static struct i2c_client *update_client = NULL;
-
-#if CTP_CHARGER_DETECT
-extern int power_supply_get_battery_charge_state(struct power_supply *psy);
-static struct power_supply *batt_psy = NULL;
-static u8 is_charger_plug = 0;
-static u8 pre_charger_status = 0;
-
-#endif
 
 #if CTP_PROC_INTERFACE
 static struct i2c_client *g_focalclient = NULL;
@@ -355,23 +343,6 @@ static irqreturn_t ft5x06_ts_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-
-#if CTP_CHARGER_DETECT
-	if (!batt_psy) {
-
-		batt_psy = power_supply_get_by_name("usb");
-	} else {
-		is_charger_plug = (u8)power_supply_get_battery_charge_state(batt_psy);
-
-
-		if (is_charger_plug != pre_charger_status)  {
-			pre_charger_status = is_charger_plug;
-			ft5x0x_write_reg(update_client, 0x8B, is_charger_plug);
-
-		}
-	}
-
-#endif
 
 	ip_dev = data->input_dev;
 	buf = data->tch_data;
@@ -686,24 +657,6 @@ static int ft5x06_ts_resume(struct device *dev)
 	msleep(data->pdata->soft_rst_dly);
 
 	enable_irq(data->client->irq);
-
-#if CTP_CHARGER_DETECT
-	batt_psy = power_supply_get_by_name("usb");
-	if (!batt_psy)
-		CTP_ERROR("tp resume battery supply not found\n");
-	else{
-		is_charger_plug = (u8)power_supply_get_battery_charge_state(batt_psy);
-
-		CTP_DEBUG("is_charger_plug %d, prev %d", is_charger_plug, pre_charger_status);
-		if (is_charger_plug)  {
-			ft5x0x_write_reg(update_client, 0x8B, 1);
-		} else{
-			ft5x0x_write_reg(update_client, 0x8B, 0);
-		}
-	}
-	pre_charger_status = is_charger_plug;
-#endif
-
 
 	data->suspended = false;
 
@@ -2738,12 +2691,6 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 	} else {
 		dev_err(&client->dev, "no upgrade\n");
 	}
-#endif
-
-#if CTP_CHARGER_DETECT
-	batt_psy = power_supply_get_by_name("usb");
-	if (!batt_psy)
-		CTP_DEBUG("tp battery supply not found\n");
 #endif
 
 	enable_irq(data->client->irq);
