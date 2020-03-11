@@ -2378,16 +2378,6 @@ static const u32 runnable_avg_yN_sum[] = {
 };
 
 /*
- * Precomputed \Sum y^k { 1<=k<=n, where n%32=0). Values are rolled down to
- * lower integers. See Documentation/scheduler/sched-avg.txt how these
- * were generated:
- */
-static const u32 __accumulated_sum_N32[] = {
-	    0, 23371, 35056, 40899, 43820, 45281,
-	46011, 46376, 46559, 46650, 46696, 46719,
-};
-
-/*
  * Approximate:
  *   val * y^n,    where y^32 ~= 0.5 (~1 scheduling period)
  */
@@ -2436,9 +2426,14 @@ static u32 __compute_runnable_contrib(u64 n)
 	else if (unlikely(n >= LOAD_AVG_MAX_N))
 		return LOAD_AVG_MAX;
 
-	/* Since n < LOAD_AVG_MAX_N, n/LOAD_AVG_PERIOD < 11 */
-	contrib = __accumulated_sum_N32[n/LOAD_AVG_PERIOD];
-	n %= LOAD_AVG_PERIOD;
+	/* Compute \Sum k^n combining precomputed values for k^i, \Sum k^j */
+	do {
+		contrib /= 2; /* y^LOAD_AVG_PERIOD = 1/2 */
+		contrib += runnable_avg_yN_sum[LOAD_AVG_PERIOD];
+
+		n -= LOAD_AVG_PERIOD;
+	} while (n > LOAD_AVG_PERIOD);
+
 	contrib = decay_load(contrib, n);
 	return contrib + runnable_avg_yN_sum[n];
 }
@@ -5886,11 +5881,6 @@ static void start_cfs_slack_bandwidth(struct cfs_bandwidth *cfs_b)
 	if (runtime_refresh_within(cfs_b, min_left))
 		return;
 
-	/* don't push forwards an existing deferred unthrottle */
-	if (cfs_b->slack_started)
-		return;
-	cfs_b->slack_started = true;
-
 	start_bandwidth_timer(&cfs_b->slack_timer,
 				ns_to_ktime(cfs_bandwidth_slack_period));
 }
@@ -5942,7 +5932,6 @@ static void do_sched_cfs_slack_timer(struct cfs_bandwidth *cfs_b)
 
 	/* confirm we're still not at a refresh boundary */
 	raw_spin_lock(&cfs_b->lock);
-	cfs_b->slack_started = false;
 	if (cfs_b->distribute_running) {
 		raw_spin_unlock(&cfs_b->lock);
 		return;
@@ -6087,7 +6076,6 @@ void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 	cfs_b->period_timer.function = sched_cfs_period_timer;
 	hrtimer_init(&cfs_b->slack_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	cfs_b->slack_timer.function = sched_cfs_slack_timer;
-	cfs_b->slack_started = false;
 	cfs_b->distribute_running = 0;
 }
 
@@ -8576,10 +8564,6 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 	if (!(env->sd->flags & SD_ASYM_PACKING))
 		return true;
 
-	/* No ASYM_PACKING if target cpu is already busy */
-	if (env->idle == CPU_NOT_IDLE)
-		return true;
-
 	/*
 	 * ASYM_PACKING needs to move all the work to the lowest
 	 * numbered CPUs in the group, therefore mark all groups
@@ -8589,8 +8573,7 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 		if (!sds->busiest)
 			return true;
 
-		/* Prefer to move from highest possible cpu's work */
-		if (group_first_cpu(sds->busiest) < group_first_cpu(sg))
+		if (group_first_cpu(sds->busiest) > group_first_cpu(sg))
 			return true;
 	}
 
@@ -8733,9 +8716,6 @@ static int check_asym_packing(struct lb_env *env, struct sd_lb_stats *sds)
 	int busiest_cpu;
 
 	if (!(env->sd->flags & SD_ASYM_PACKING))
-		return 0;
-
-	if (env->idle == CPU_NOT_IDLE)
 		return 0;
 
 	if (!sds->busiest)
@@ -8928,7 +8908,8 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 	local = &sds.local_stat;
 	busiest = &sds.busiest_stat;
 
-	if (check_asym_packing(env, &sds))
+	if ((env->idle == CPU_IDLE || env->idle == CPU_NEWLY_IDLE) &&
+	    check_asym_packing(env, &sds))
 		return sds.busiest;
 
 	/* There is no busy sibling group to pull tasks from */
@@ -9168,13 +9149,6 @@ static int should_we_balance(struct lb_env *env)
 	struct sched_group *sg = env->sd->groups;
 	struct cpumask *sg_cpus, *sg_mask;
 	int cpu, balance_cpu = -1;
-
-	/*
-	 * Ensure the balancing environment is consistent; can happen
-	 * when the softirq triggers 'during' hotplug.
-	 */
-	if (!cpumask_test_cpu(env->dst_cpu, env->cpus))
-		return 0;
 
 	/*
 	 * In the newly idle case, we will allow all the cpu's
