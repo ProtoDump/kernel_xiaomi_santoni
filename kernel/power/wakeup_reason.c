@@ -49,7 +49,7 @@ static ktime_t last_monotime; /* monotonic time before last suspend */
 static ktime_t curr_monotime; /* monotonic time after last suspend */
 static ktime_t last_stime; /* monotonic boottime offset before last suspend */
 static ktime_t curr_stime; /* monotonic boottime offset after last suspend */
-#if IS_ENABLED(CONFIG_SUSPEND_TIME)
+#if IS_ENABLED(CONFIG_SUSPEND_TIME) && IS_ENABLED(CONFIG_DEBUG_FS)
 static unsigned int time_in_suspend_bins[32];
 #endif
 
