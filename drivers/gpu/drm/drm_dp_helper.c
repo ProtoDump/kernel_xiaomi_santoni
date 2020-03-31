@@ -545,12 +545,10 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 	 *
 	 * We also try to account for the i2c bus speed.
 	 */
-	int max_retries = max(7, drm_dp_i2c_retry_count(msg, dp_aux_i2c_speed_khz));
-
-	for (retry = 0, defer_i2c = 0; retry < (max_retries + defer_i2c); retry++) {
-		ret = aux->transfer(aux, msg);
-		if (ret < 0) {
-			if (ret == -EBUSY)
+	for (retry = 0; retry < 7; retry++) {
+		err = aux->transfer(aux, msg);
+		if (err < 0) {
+			if (err == -EBUSY)
 				continue;
 
 			DRM_DEBUG_KMS("transaction failed: %d\n", ret);
